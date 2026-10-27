@@ -1,0 +1,48 @@
+
+name: Weekly Analytics Report
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 3 * * 1"
+
+jobs:
+  send-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start analytics server
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+        run: |
+          node server.js > server.log 2>&1 &
+
+          for i in {1..15}; do
+            if curl --fail --silent --show-error "http://localhost:3001/api/analytics?startDate=2026-10-26&endDate=2026-10-27" > /dev/null; then
+              echo "Analytics server is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          cat server.log
+          echo "Analytics server failed to start"
+          exit 1
+
+      - name: Send analytics email
+        run: |
+          curl --fail --silent --show-error \
+            -X POST \
+            "http://localhost:3001/api/analytics/email"
